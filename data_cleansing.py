@@ -27,9 +27,15 @@ def process_headers(columns):
 def to_list(x):
     return list(x)
 
-def first_non_null(x):
-    nonnull = x.dropna()
-    return nonnull.iloc[0] if not nonnull.empty else None
+def first_non_null_in_group(x):
+    """
+    Return the first non-null value in the Series x.
+    If every value is null, return None.
+    """
+    for val in x:
+        if pd.notnull(val):
+            return val
+    return None
 
 def combine_gene_info(row):
     """
@@ -87,7 +93,7 @@ def load_and_clean_data(file_path):
         if col in gene_columns:
             agg_dict[col] = to_list
         else:
-            agg_dict[col] = first_non_null
+            agg_dict[col] = first_non_null_in_group
     
     aggregated = df.groupby("UR", as_index=False).agg(agg_dict)
     aggregated["Gene"] = aggregated.apply(combine_gene_info, axis=1)
