@@ -1,4 +1,6 @@
 pandas
 numpy
 openpyxl
-statsmodels.api
+statsmodels
+colorama
+tabulate

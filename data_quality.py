@@ -1,6 +1,7 @@
 import os
 import json
 import pandas as pd
+from ui import styled_print
 
 def clean_data_for_ols_by_column(df, columns_to_check, config_path="conf/data_fitting.json"):
     """
@@ -43,7 +44,7 @@ def clean_data_for_ols_by_column(df, columns_to_check, config_path="conf/data_fi
         # Get the list of patient IDs (UR values) where the column is missing.
         missing_urs = df.loc[df[col].isnull(), "UR"].tolist()
         if missing_urs:
-            print(f"For column '{col}', the following UR values have missing data: {missing_urs}")
+            styled_print("For column '{col}', the following UR values have missing data: {missing_urs}")
             # Look for a pre-configured option.
             if col in config:
                 option = config[col]
@@ -52,7 +53,7 @@ def clean_data_for_ols_by_column(df, columns_to_check, config_path="conf/data_fi
                     option_type = "calculate"
                 else:
                     option_type = option
-                print(f"Using configured option for column '{col}': {option}")
+                styled_print("Using configured option for column '{col}': {option}")
             else:
                 print(f"Choose a method to handle missing data for column '{col}':")
                 print(" Options: 'drop', 'mean', 'medium', 'mode', 'zero', 'calc'")
