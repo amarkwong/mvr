@@ -7,7 +7,6 @@ def main():
     # Update with your actual Excel file path.
     file_path = "data/data.xlsx"
     aggregated, header_metadata = load_and_clean_data(file_path)
-    print(header_metadata)
     
     # Define baseline variables and their corresponding metrics.
     baseline_vars = ['*Gender', '*Age at dx', 'Gene']

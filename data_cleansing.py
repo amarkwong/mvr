@@ -1,7 +1,6 @@
 import pandas as pd
 import os
 import json
-import pandas as pd
 
 def process_headers(columns):
     header_names = []
@@ -29,14 +28,6 @@ def combine_gene_info(row):
     vafs = row["VAF% G1"]
     tiers = row["Tier"]
     var_descs = row["Variant description"]
-    
-    # Debug: print the lengths and contents of the lists for this row.
-    # print(f"Debug combine_gene_info for UR {row['UR']}:")
-    # print(f"  Genes: {genes} (len={len(genes)})")
-    # print(f"  VAF% G1: {vafs} (len={len(vafs)})")
-    # print(f"  Tier: {tiers} (len={len(tiers)})")
-    # print(f"  Variant description: {var_descs} (len={len(var_descs)})")
-    
     for gene, vaf, tier, var_desc in zip(genes, vafs, tiers, var_descs):
         if pd.isna(gene) or gene == 0 or str(gene).strip() == "0":
             continue
@@ -50,71 +41,50 @@ def combine_gene_info(row):
 
 def load_and_clean_data(file_path):
     """
-    Load Excel data and perform data cleansing steps:
-      - Use specified NA strings.
-      - Process headers.
-      - Sort by patient identifier ('UR') so rows remain in order.
-      - Do NOT apply global forward-fill to gene-related columns so that each raw row is preserved.
-      - Build an aggregation dictionary:
-            * For gene-related columns, collect all values (using tolist()).
-            * For non-gene columns, take the first value.
-      - Group by 'UR' and aggregate.
-      - Print debug information on group sizes and for a selected UR (e.g., PA177925).
-      - Combine gene-related columns into a nested "Gene" list.
-      - Write the aggregated DataFrame to a JSON file.
-      
+    Load Excel data and aggregate rows by 'UR' so that non-gene columns remain as in the first row,
+    and gene-related columns are collected into lists. Then combine the gene-related lists into a single
+    nested "Gene" list.
+    
+    This function does NOT apply a global forward-fill, so that if a column like 'Ferritin' is null
+    in the first row for a patient, it remains null.
+    
     Returns:
-      - Aggregated DataFrame.
-      - Header metadata dictionary.
+      - aggregated: the cleaned, aggregated DataFrame.
+      - header_metadata: dictionary of header descriptions.
     """
     na_values = ["NA", "na", "N/A", "n/a", "N/a"]
     df = pd.read_excel(file_path, engine="openpyxl", na_values=na_values)
-    
+    df["UR"] = df["UR"].ffill()
     # Process headers.
     raw_headers = list(df.columns)
     new_columns, header_metadata = process_headers(raw_headers)
-    # Sort by patient identifier.
+    df.columns = new_columns
+
+    # Sort by patient identifier (UR) to ensure rows for the same patient remain together.
     if "UR" in df.columns:
         df = df.sort_values("UR")
     
-    # Debug: print group sizes (number of rows per UR) in the raw data.
-    if "UR" in df.columns:
-        group_sizes = df.groupby("UR").size()
-        print("Debug: Group sizes in raw data:")
-        print(group_sizes)
-    
     # Define gene-related columns.
     gene_columns = ["Gene", "VAF% G1", "Tier", "Variant description"]
-    # Note: Do NOT forward-fill these columns here.
+    # (No forward fill is applied here, so that each raw row remains intact.)
     
-    # Build aggregation dictionary.
+    # Build an aggregation dictionary.
     agg_dict = {}
     for col in df.columns:
         if col == "UR":
             continue  # Grouping key.
         if col in gene_columns:
-            # Use a lambda that captures the column and returns all values as a list.
+            # Using lambda with a default parameter to capture the current col.
             agg_dict[col] = lambda x, col=col: x.tolist()
         else:
-            agg_dict[col] = lambda x: x.iloc[0]
+            agg_dict[col] = lambda x: x.dropna().iloc[0] if not x.dropna().empty else None
     
     aggregated = df.groupby("UR", as_index=False).agg(agg_dict)
-    
-    # Debug: For a selected UR (e.g., PA177925), print the aggregated gene-related lists.
-    debug_ur = "PA177925"
-    if debug_ur in aggregated["UR"].values:
-        agg_subset = aggregated[aggregated["UR"] == debug_ur]
-        print(f"Debug: Aggregated gene columns for UR {debug_ur}:")
-        for col in gene_columns:
-            print(f"  {col}: {agg_subset.iloc[0][col]} (len={len(agg_subset.iloc[0][col])})")
-    else:
-        print(f"Debug: UR {debug_ur} not found in aggregated data.")
     
     # Combine gene-related columns into a single nested "Gene" list.
     aggregated["Gene"] = aggregated.apply(combine_gene_info, axis=1)
     aggregated = aggregated.drop(columns=["VAF% G1", "Tier", "Variant description"])
     
-    # Write aggregated DataFrame to JSON for inspection.
     aggregated.to_json("merged_output.json", orient="records", indent=2)
     
     return aggregated, header_metadata
