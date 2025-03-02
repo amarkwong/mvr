@@ -1,5 +1,6 @@
 import pandas as pd
 import statsmodels.api as sm
+from data_quality import clean_data_for_ols_by_column
 
 def multivariate_linear_regression(df, x_columns, y_column):
     """
@@ -16,12 +17,17 @@ def multivariate_linear_regression(df, x_columns, y_column):
     Prints the regression summary.
     """
     # Extract independent (X) and dependent (y) variables.
-    X = df[x_columns]
-    y = df[y_column]
+    clean_df=clean_data_for_ols_by_column(df,x_columns)
+
+    # need to check y column as well
+    clean_df=clean_data_for_ols_by_column(clean_df,[y_column])
+
+    X = clean_df[x_columns]
+    y = clean_df[y_column]
     
     # Add a constant term (intercept) to the independent variables.
     X = sm.add_constant(X)
-    
+
     # Fit the OLS regression model.
     model = sm.OLS(y, X).fit()
     
