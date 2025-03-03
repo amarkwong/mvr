@@ -55,7 +55,7 @@ def clean_data_for_ols_by_column(df, columns_to_check, config_path="conf/data_fi
                     option_type = option
                 styled_print("Using configured option for column '{col}': {option}")
             else:
-                print(f"Choose a method to handle missing data for column '{col}':")
+                styled_print("Choose a method to handle missing data for column '{col}':")
                 print(" Options: 'drop', 'mean', 'medium', 'mode', 'zero', 'calc'")
                 option = input("Enter your choice: ").strip().lower()
                 while option not in allowed_options:
@@ -108,7 +108,7 @@ def clean_data_for_ols_by_column(df, columns_to_check, config_path="conf/data_fi
                             return row[col]
                         
                         df[col] = df.apply(calculate_value, axis=1)
-                        print(f"Missing '{col}' values have been calculated using: {first_input} {op} {second_input} in {unit}s.")
+                        styled_print("Missing '{col}' values have been calculated using: {first_input} {op} {second_input} in {unit}s.")
             elif option == "drop":
                 df = df.dropna(subset=[col])
                 print(f"Rows with missing '{col}' have been dropped.")

@@ -9,7 +9,7 @@ def process_headers(columns):
         col_str = str(col).strip()
         if '#' in col_str:
             actual, desc = col_str.split('#', 1)
-            actual = actual.strip().lstrip('*')
+            actual = actual.strip().lstrip('*').rstrip('?')
             desc = desc.strip()
             header_names.append(actual)
             descriptions[actual] = desc

@@ -1,6 +1,7 @@
 import pandas as pd
 import statsmodels.api as sm
 from data_quality import clean_data_for_ols_by_column
+from ui import ols_to_markdown
 
 def multivariate_linear_regression(df, x_columns, y_column):
     """
@@ -30,7 +31,16 @@ def multivariate_linear_regression(df, x_columns, y_column):
 
     # Fit the OLS regression model.
     model = sm.OLS(y, X).fit()
-    
+
+    markdown_result = ols_to_markdown(model)
+
+    # Print the Markdown
+    print(markdown_result)
+
+    # Save to file
+    with open("ols_results.md", "w") as f:
+        f.write(markdown_result)
+
     # Print the regression summary.
     print(model.summary())
 
