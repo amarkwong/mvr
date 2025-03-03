@@ -160,34 +160,43 @@ def plot_histogram(stat_dict, xlabel, ylabel, title):
     plt.ylabel(ylabel)
     plt.title(title)
     plt.show()
-def dual_axis_histogram_line_chart(histogram_data, line_chart_data, x_label, y1_label, y2_label, title):
+
+def dual_axis_histogram_line_chart(histogram_data, line_chart_data, x_label, y1_label, y2_label, title, metadata_lookup=None):
     """
     Draws a dual-axis chart:
-    - Histogram (bar chart) from `histogram_data` (processed dictionary).
-    - Line chart from `line_chart_data` (processed dictionary).
-    
+    - Histogram (bar chart) from `histogram_data` (numeric category counts).
+    - Line chart from `line_chart_data` (numeric category averages).
+    - Maps numeric x-axis values to readable labels using `metadata_lookup`.
+
     Parameters:
-        histogram_data (dict): Dictionary where keys are categories and values are counts.
-        line_chart_data (dict): Dictionary where keys are the same as `histogram_data` but values are averages.
+        histogram_data (dict): Dictionary where keys are categories (numeric) and values are counts.
+        line_chart_data (dict): Dictionary where keys match `histogram_data`, values are mean/median/mode/etc.
         x_label (str): Label for x-axis.
         y1_label (str): Label for histogram y-axis.
         y2_label (str): Label for line chart y-axis.
         title (str): Plot title.
-
+        metadata_lookup (dict, optional): Lookup dictionary for renaming x-axis labels.
+    
     Example Usage:
-        dual_axis_histogram_line_chart(demo_stats['Gene'], avg_age_per_defect, "Gene Defects Count", "Patient Count", "Average Age at dx", "Gene Defects vs. Age at Diagnosis")
+        dual_axis_histogram_line_chart(demo_stats['Gender'], avg_age_per_defect, "Gender", "Patient Count", "Average Age at dx", "Gender Distribution", metadata_lookup)
     """
     # Convert dictionary data to sorted lists
-    x_values = sorted(histogram_data.keys())  # Sorted defect count groups
+    x_values = sorted(histogram_data.keys())  # Numeric categories
     y1_values = [histogram_data[k] for k in x_values]  # Patient counts
-    y2_values = [line_chart_data.get(k, None) for k in x_values]  # Avg Age at dx (match x_values)
+    y2_values = [line_chart_data.get(k, None) for k in x_values]  # Avg Age at dx
+
+    # Remap x-axis labels using metadata if provided
+    if metadata_lookup and x_label in metadata_lookup:
+        x_labels = [metadata_lookup[x_label].get(k, str(k)) for k in x_values]  # Convert 0→female, 1→male
+    else:
+        x_labels = x_values  # Keep original values if no mapping
 
     # Initialize figure
     fig, ax1 = plt.subplots(figsize=(8, 5))
 
     # Bar Chart (Histogram)
     color1 = "skyblue"
-    ax1.bar(x_values, y1_values, color=color1, alpha=0.7, label=y1_label)
+    ax1.bar(x_labels, y1_values, color=color1, alpha=0.7, label=y1_label)
     ax1.set_xlabel(x_label)
     ax1.set_ylabel(y1_label, color=color1)
     ax1.tick_params(axis='y', labelcolor=color1)
@@ -195,7 +204,7 @@ def dual_axis_histogram_line_chart(histogram_data, line_chart_data, x_label, y1_
     # Line Chart (Average Age)
     ax2 = ax1.twinx()
     color2 = "red"
-    ax2.plot(x_values, y2_values, color=color2, marker="o", linestyle="-", linewidth=2, label=y2_label)
+    ax2.plot(x_labels, y2_values, color=color2, marker="o", linestyle="-", linewidth=2, label=y2_label)
     ax2.set_ylabel(y2_label, color=color2)
     ax2.tick_params(axis='y', labelcolor=color2)
 

@@ -46,52 +46,63 @@ def multivariate_linear_regression(df, x_columns, y_column):
 
 def baseline_demographic(df, baseline_vars, baseline_metric):
     """
-    Compute baseline demographics for the given DataFrame.
+    Compute baseline demographics for the given DataFrame, supporting multiple metrics per variable.
 
     Parameters:
       df : pandas.DataFrame
           The dataset.
       baseline_vars : list of str
-          Baseline variable names. A leading '*' (e.g., '*Gender') is removed.
-      baseline_metric : list of str
-          Metrics for each variable. Supported metrics are:
-          - "histogram": For categorical variables, compute value_counts.
-          - "median": For numeric variables, compute the median.
-          - "count histogram": For list-type columns (e.g., Gene),
-            compute a histogram of the list lengths.
-    
+          Baseline variable names.
+      baseline_metric : list of str or list of lists
+          Metrics for each variable. Supported metrics:
+          - "histogram": Compute value_counts for categorical variables.
+          - "median": Compute median of numeric variables.
+          - "count histogram": Compute a histogram of list lengths (for Gene mutations).
+          - "median per <Category>": Compute median grouped by another variable (e.g., per Gender).
+
     Returns:
       dict
-          A dictionary where keys are cleaned variable names and values are the computed statistics.
+          A dictionary where keys are variable names and values are the computed statistics.
     """
     result = {}
-    
-    for var, metric in zip(baseline_vars, baseline_metric):
+
+    for var, metrics in zip(baseline_vars, baseline_metric):
         # Clean the variable name by removing any leading '*' and extra spaces.
         clean_var = var.lstrip('*').strip()
-        
+
         if clean_var not in df.columns:
             print(f"Warning: Column '{clean_var}' not found in DataFrame.")
             result[clean_var] = None
             continue
+
+        # Convert metrics to list if not already (for single-metric cases)
+        if not isinstance(metrics, list):
+            metrics = [metrics]
+
+        # Store results for this variable
+        variable_results = {}
+
+        for metric in metrics:
+            if metric.lower() == 'histogram':
+                variable_results["histogram"] = df[clean_var].value_counts(dropna=False).to_dict()
+
+            elif metric.lower() == 'median':
+                variable_results["median"] = df[clean_var].median()
+
+            elif metric.lower() == 'count histogram':
+                lengths = df[clean_var].apply(lambda x: len(x) if isinstance(x, list) else 0)
+                variable_results["count histogram"] = lengths.value_counts().sort_index().to_dict()
+
+            elif metric.lower() == 'median per gender' and 'Gender' in df.columns:
+                variable_results["median per Gender"] = df.groupby("Gender")[clean_var].median().to_dict()
+
+            elif metric.lower() == 'median per gene count' and 'Gene Count' in df.columns:
+                variable_results["median per Gene Count"] = df.groupby("Gene Count")[clean_var].median().to_dict()
+
+            else:
+                print(f"Warning: Unknown or unsupported metric '{metric}' for column '{clean_var}'.")
         
-        # Process based on the metric.
-        if metric.lower() == 'histogram':
-            hist = df[clean_var].value_counts(dropna=False).to_dict()
-            result[clean_var] = hist
-        
-        elif metric.lower() == 'median':
-            median_val = df[clean_var].median()
-            result[clean_var] = median_val
-        
-        elif metric.lower() == 'count histogram':
-            # For a column where each value is a list (e.g., Gene), compute the count histogram of list lengths.
-            lengths = df[clean_var].apply(lambda x: len(x) if isinstance(x, list) else 0)
-            count_hist = lengths.value_counts().sort_index().to_dict()
-            result[clean_var] = count_hist
-        
-        else:
-            print(f"Warning: Unknown metric '{metric}' for column '{clean_var}'.")
-            result[clean_var] = None
+        # Store the computed results
+        result[clean_var] = variable_results
 
     return result

@@ -1,5 +1,6 @@
 import pandas as pd
 import os
+import re
 import json
 
 def process_headers(columns):
@@ -38,6 +39,31 @@ def combine_gene_info(row):
             "Variant description": var_desc
         })
     return gene_records
+
+def generate_metadata_mapping(header_metadata):
+    """
+    Parses the header_metadata dictionary and creates a lookup mapping for categorical values.
+
+    Parameters:
+        header_metadata (dict): Dictionary containing metadata descriptions.
+
+    Returns:
+        dict: A nested dictionary where keys are column names, and values are dictionaries mapping numeric codes to labels.
+    """
+    mapping_dict = {}
+
+    for column, mapping_str in header_metadata.items():
+        value_mapping = {}
+        matches = re.findall(r"(\d+)\s*[=:-]?\s*([\w\s]+)", mapping_str)  # Handles "1 = label" or "1 - label" formats
+        
+        for num, label in matches:
+            if label.strip():  # Ensure the label is not empty
+                value_mapping[int(num)] = label.strip().lower()  # Normalize labels
+
+        if value_mapping:  # Only store mappings that are valid
+            mapping_dict[column] = value_mapping
+
+    return mapping_dict
 
 def load_and_clean_data(file_path):
     """
