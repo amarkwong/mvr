@@ -4,6 +4,7 @@ import numpy as np
 import sys
 import re
 import statsmodels.api as sm
+import seaborn as sns
 from colorama import init, Fore, Style
 
 # Initialize colorama (needed for Windows)
@@ -161,68 +162,153 @@ def plot_histogram(stat_dict, xlabel, ylabel, title):
     plt.title(title)
     plt.show()
 
-def dual_axis_histogram_line_chart(histogram_data, line_chart_data, x_label, y1_label, y2_label, title, metadata_lookup=None):
+def fetch_boxplot_data(demo_stats, category_name, numeric_name, metadata_lookup=None):
     """
-    Draws a dual-axis chart:
-    - Histogram (bar chart) from `histogram_data` (numeric category counts).
-    - Line chart from `line_chart_data` (numeric category averages).
-    - Maps numeric x-axis values to readable labels using `metadata_lookup`.
+    Extracts and formats box plot data (max, median, min) from `demo_stats` for visualization.
 
     Parameters:
-        histogram_data (dict): Dictionary where keys are categories (numeric) and values are counts.
-        line_chart_data (dict): Dictionary where keys match `histogram_data`, values are mean/median/mode/etc.
+        demo_stats (dict): Precomputed statistics from `baseline_demographic()`.
+        category_name (str): The categorical variable (e.g., "Gender", "Gene Count").
+        numeric_name (str): The numeric variable (e.g., "Age at dx").
+        metadata_lookup (dict, optional): Mapping dictionary for converting numeric labels to readable names.
+
+    Returns:
+        pd.DataFrame: A formatted DataFrame with the necessary statistics for box plotting.
+    """
+    if numeric_name not in demo_stats:
+        raise KeyError(f"{numeric_name} not found in demo_stats.")
+
+    boxplot_stats = demo_stats[numeric_name]
+
+    # Extracting overall statistics
+    global_max = boxplot_stats.get("max", None)
+    global_median = boxplot_stats.get("median", None)
+    global_min = boxplot_stats.get("min", None)
+
+    # Extracting per-category statistics
+    per_category_max = boxplot_stats.get(f"max per {category_name}", {})
+    per_category_median = boxplot_stats.get(f"median per {category_name}", {})
+    per_category_min = boxplot_stats.get(f"min per {category_name}", {})
+
+    # Convert numeric categories to readable labels if metadata_lookup is provided
+    category_labels = list(per_category_median.keys())
+    if metadata_lookup and category_name in metadata_lookup:
+        category_labels = [metadata_lookup[category_name].get(k, str(k)) for k in category_labels]
+
+    # Creating a structured DataFrame
+    boxplot_data = pd.DataFrame({
+        category_name: category_labels,  # Converted to readable labels
+        "max": [per_category_max.get(k, global_max) for k in per_category_median.keys()],
+        "median": [per_category_median.get(k, global_median) for k in per_category_median.keys()],
+        "min": [per_category_min.get(k, global_min) for k in per_category_median.keys()]
+    })
+
+    boxplot_data_long = boxplot_data.melt(id_vars=[category_name], var_name="Statistic", value_name=numeric_name)
+
+    return boxplot_data_long
+
+def dual_axis_histogram_box_chart(histogram_data, df, x_label, y1_label, y2_label, title, color_config=None, box_opacity=0.5, box_width=0.5):
+    """
+    Draws a dual-axis chart:
+    - Histogram (bar chart) from `histogram_data`.
+    - Box plot from `df`, with customizable opacity and width.
+
+    Parameters:
+        histogram_data (dict): Precomputed histogram data (keys = categories, values = counts).
+        df (pd.DataFrame): The full dataset with categorical and numeric columns.
         x_label (str): Label for x-axis.
         y1_label (str): Label for histogram y-axis.
-        y2_label (str): Label for line chart y-axis.
+        y2_label (str): Label for box plot y-axis.
         title (str): Plot title.
-        metadata_lookup (dict, optional): Lookup dictionary for renaming x-axis labels.
-    
+        color_config (dict, optional): Dictionary mapping x-axis categories to colors.
+        box_opacity (float, optional): Opacity level for the box plot (default = 0.5).
+        box_width (float, optional): Width of the box plot elements (default = 0.5).
+
     Example Usage:
-        dual_axis_histogram_line_chart(demo_stats['Gender'], avg_age_per_defect, "Gender", "Patient Count", "Average Age at dx", "Gender Distribution", metadata_lookup)
+        dual_axis_histogram_box_chart(demo_stats['Gender']['histogram'], df, "Gender", "Patient Count", "Age at dx", "Gender Distribution", box_opacity=0.5, box_width=0.4)
     """
     # Convert dictionary data to sorted lists
-    x_values = sorted(histogram_data.keys())  # Numeric categories
-    y1_values = [histogram_data[k] for k in x_values]  # Patient counts
-    y2_values = [line_chart_data.get(k, None) for k in x_values]  # Avg Age at dx
+    x_values = sorted(histogram_data.keys())  # X-axis categories
+    y1_values = [histogram_data[k] for k in x_values]  # Histogram counts
 
-    # Remap x-axis labels using metadata if provided
-    if metadata_lookup and x_label in metadata_lookup:
-        x_labels = [metadata_lookup[x_label].get(k, str(k)) for k in x_values]  # Convert 0→female, 1→male
-    else:
-        x_labels = x_values  # Keep original values if no mapping
+    # Assign colors based on config (default to gray)
+    bar_colors = [color_config.get(cat, "#AAAAAA") for cat in x_values] if color_config else ["#AAAAAA"] * len(x_values)
 
     # Initialize figure
     fig, ax1 = plt.subplots(figsize=(8, 5))
 
     # Bar Chart (Histogram)
-    color1 = "skyblue"
-    ax1.bar(x_labels, y1_values, color=color1, alpha=0.7, label=y1_label)
+    ax1.bar(x_values, y1_values, color=bar_colors, alpha=0.7, label=y1_label)
     ax1.set_xlabel(x_label)
-    ax1.set_ylabel(y1_label, color=color1)
-    ax1.tick_params(axis='y', labelcolor=color1)
+    ax1.set_ylabel(y1_label, color="black")
+    ax1.tick_params(axis='y', labelcolor="black")
 
-    # Line Chart (Average Age)
+    # Create second y-axis for Box Plot
     ax2 = ax1.twinx()
-    color2 = "red"
-    ax2.plot(x_labels, y2_values, color=color2, marker="o", linestyle="-", linewidth=2, label=y2_label)
-    ax2.set_ylabel(y2_label, color=color2)
-    ax2.tick_params(axis='y', labelcolor=color2)
+
+    # Draw Box Plot with Custom Opacity & Width
+    boxplot = sns.boxplot(
+        x=df[x_label], 
+        y=df[y2_label], 
+        ax=ax2, 
+        width=box_width,  # ✅ Custom box width
+        patch_artist=True  # Allows us to modify box colors
+    )
+
+    # Set Box Plot Opacity
+    for patch in boxplot.artists:
+        patch.set_alpha(box_opacity)  # ✅ Adjust opacity of the box plot
+
+    ax2.set_ylabel(y2_label, color="red")
+    ax2.tick_params(axis='y', labelcolor="red")
 
     # Titles and Legends
     plt.title(title)
     ax1.legend(loc="upper left")
-    ax2.legend(loc="upper right")
 
     # Show plot
     plt.show()
 
-def print_table_markdown(table_df):
+
+
+def display_demographic_data(config, df, category_column, numeric_column, demo_stats):
     """
-    Print a pandas DataFrame as a Markdown table.
-    Requires pandas >= 1.0 for DataFrame.to_markdown().
+    Displays demographic data as a Markdown table.
+
+    Parameters:
+        config (dict): Configuration loaded from config.json.
+        df (pd.DataFrame): The full dataset.
+        category_column (str): The categorical variable for the x-axis (e.g., "Gender", "Gene Count").
+        numeric_column (str): The numeric variable for the box plot (e.g., "Age at dx").
+        demo_stats (dict): Precomputed statistics from `baseline_demographic()`.
+
+    Returns:
+        None
     """
-    try:
-        md_table = table_df.to_markdown(index=False)
-    except AttributeError:
-        md_table = table_df.to_string(index=False)
-    print(md_table)
+    # Extract stats display mode from config
+    display_mode = "table"  # Default
+    for item in config["stats"].get("baseline_demographic", []):
+        if item.get("name") == category_column:
+            display_mode = item.get("display_mode", "table")
+
+    if display_mode == "table":
+        print(f"\n📊 **Displaying {category_column} Demographic as a Table:**")
+
+        # Retrieve statistics for the given category
+        category_stats = demo_stats.get(category_column, {})
+
+        if category_stats:
+            # Convert dictionary stats to DataFrame for markdown rendering
+            stats_df = pd.DataFrame.from_dict(category_stats, orient="index", columns=[category_column])
+
+            # ✅ Display DataFrame in Markdown format
+            print(stats_df.to_markdown(index=True))  # Prints markdown-formatted table
+
+        else:
+            print(f"⚠️ Warning: No demographic data available for {category_column}")
+
+    elif display_mode == "chart":
+        print(f"⚠️ Chart mode selected. This function does not handle charts. Use `dual_axis_histogram_box_chart()`.")
+
+    else:
+        print(f"⚠️ Unknown display mode '{display_mode}' for {category_column}. Defaulting to table.")
