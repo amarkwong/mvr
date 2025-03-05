@@ -9,6 +9,7 @@ from colorama import init, Fore, Style
 
 # Initialize colorama (needed for Windows)
 init(autoreset=True)
+# const
 # Define custom color mapping
 COLOR_PALETTE = {
     "col": Fore.CYAN,
@@ -19,6 +20,8 @@ COLOR_PALETTE = {
     "second_input": Fore.YELLOW,
     "unit": Fore.CYAN
 }
+
+MARKDOWN_FILE = "analysis.md"
 
 def ols_to_markdown(results):
     """
@@ -148,90 +151,22 @@ def styled_print(text, color="white", style="normal", end="\n", **kwargs):
         # No variables, just format and print the static text
         sys.stdout.write(f"{style_code}{color_code}{text}{Style.RESET_ALL}{end}")
 
-def plot_histogram(stat_dict, xlabel, ylabel, title):
-    """
-    Plot a histogram from a dictionary of statistics.
-    """
-    keys = list(stat_dict.keys())
-    values = list(stat_dict.values())
-    
-    plt.figure(figsize=(8, 6))
-    plt.bar(keys, values, color='skyblue', edgecolor='black')
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
-    plt.title(title)
-    plt.show()
-
-def fetch_boxplot_data(demo_stats, category_name, numeric_name, metadata_lookup=None):
-    """
-    Extracts and formats box plot data (max, median, min) from `demo_stats` for visualization.
-
-    Parameters:
-        demo_stats (dict): Precomputed statistics from `baseline_demographic()`.
-        category_name (str): The categorical variable (e.g., "Gender", "Gene Count").
-        numeric_name (str): The numeric variable (e.g., "Age at dx").
-        metadata_lookup (dict, optional): Mapping dictionary for converting numeric labels to readable names.
-
-    Returns:
-        pd.DataFrame: A formatted DataFrame with the necessary statistics for box plotting.
-    """
-    if numeric_name not in demo_stats:
-        raise KeyError(f"{numeric_name} not found in demo_stats.")
-
-    boxplot_stats = demo_stats[numeric_name]
-
-    # Extracting overall statistics
-    global_max = boxplot_stats.get("max", None)
-    global_median = boxplot_stats.get("median", None)
-    global_min = boxplot_stats.get("min", None)
-
-    # Extracting per-category statistics
-    per_category_max = boxplot_stats.get(f"max per {category_name}", {})
-    per_category_median = boxplot_stats.get(f"median per {category_name}", {})
-    per_category_min = boxplot_stats.get(f"min per {category_name}", {})
-
-    # Convert numeric categories to readable labels if metadata_lookup is provided
-    category_labels = list(per_category_median.keys())
-    if metadata_lookup and category_name in metadata_lookup:
-        category_labels = [metadata_lookup[category_name].get(k, str(k)) for k in category_labels]
-
-    # Creating a structured DataFrame
-    boxplot_data = pd.DataFrame({
-        category_name: category_labels,  # Converted to readable labels
-        "max": [per_category_max.get(k, global_max) for k in per_category_median.keys()],
-        "median": [per_category_median.get(k, global_median) for k in per_category_median.keys()],
-        "min": [per_category_min.get(k, global_min) for k in per_category_median.keys()]
-    })
-
-    boxplot_data_long = boxplot_data.melt(id_vars=[category_name], var_name="Statistic", value_name=numeric_name)
-
-    return boxplot_data_long
-
-def dual_axis_histogram_box_chart(histogram_data, df, x_label, y1_label, y2_label, title, color_config=None, box_opacity=0.5, box_width=0.5):
+def dual_axis_histogram_box_chart(histogram_data, df, x_label, y1_label, y2_label, title, 
+                                  color_config=None, box_opacity=0.5, box_width=0.5, save_file=None):
     """
     Draws a dual-axis chart:
     - Histogram (bar chart) from `histogram_data`.
     - Box plot from `df`, with customizable opacity and width.
+    - Saves to file if `save_file` is provided.
 
     Parameters:
-        histogram_data (dict): Precomputed histogram data (keys = categories, values = counts).
-        df (pd.DataFrame): The full dataset with categorical and numeric columns.
-        x_label (str): Label for x-axis.
-        y1_label (str): Label for histogram y-axis.
-        y2_label (str): Label for box plot y-axis.
-        title (str): Plot title.
-        color_config (dict, optional): Dictionary mapping x-axis categories to colors.
-        box_opacity (float, optional): Opacity level for the box plot (default = 0.5).
-        box_width (float, optional): Width of the box plot elements (default = 0.5).
-
-    Example Usage:
-        dual_axis_histogram_box_chart(demo_stats['Gender']['histogram'], df, "Gender", "Patient Count", "Age at dx", "Gender Distribution", box_opacity=0.5, box_width=0.4)
+        save_file (str, optional): If provided, saves the chart instead of displaying it.
     """
     # Convert dictionary data to sorted lists
-    x_values = sorted(histogram_data.keys())  # X-axis categories
-    y1_values = [histogram_data[k] for k in x_values]  # Histogram counts
+    x_values = sorted(histogram_data.keys())  
+    y1_values = [histogram_data[k] for k in x_values]  
 
-    # Assign colors based on config (default to gray)
+    # Assign colors based on config
     bar_colors = [color_config.get(cat, "#AAAAAA") for cat in x_values] if color_config else ["#AAAAAA"] * len(x_values)
 
     # Initialize figure
@@ -247,33 +182,80 @@ def dual_axis_histogram_box_chart(histogram_data, df, x_label, y1_label, y2_labe
     ax2 = ax1.twinx()
 
     # Draw Box Plot with Custom Opacity & Width
-    boxplot = sns.boxplot(
-        x=df[x_label], 
-        y=df[y2_label], 
-        ax=ax2, 
-        width=box_width,  # ✅ Custom box width
-        patch_artist=True  # Allows us to modify box colors
-    )
-
-    # Set Box Plot Opacity
+    boxplot = sns.boxplot(x=df[x_label], y=df[y2_label], ax=ax2, width=box_width, patch_artist=True)
     for patch in boxplot.artists:
-        patch.set_alpha(box_opacity)  # ✅ Adjust opacity of the box plot
+        patch.set_alpha(box_opacity)
 
     ax2.set_ylabel(y2_label, color="red")
     ax2.tick_params(axis='y', labelcolor="red")
 
-    # Titles and Legends
     plt.title(title)
     ax1.legend(loc="upper left")
 
-    # Show plot
-    plt.show()
+    if save_file:
+        plt.savefig(save_file, bbox_inches="tight")
+        plt.close()
+    else:
+        plt.show()
 
-
-
-def display_demographic_data(config, df, category_column, numeric_column, demo_stats):
+def generate_markdown_table(category_column, demo_stats, save_file=None, metadata_lookup=None):
     """
-    Displays demographic data as a Markdown table.
+    Generates a Markdown-formatted table for demographic data.
+    
+    - Uses metadata mapping to replace numeric values with labels when applicable.
+    - Formats category labels for improved readability.
+
+    Parameters:
+        category_column (str): The demographic category to process.
+        demo_stats (dict): The precomputed statistics from `baseline_demographic()`.
+        save_file (str, optional): If provided, writes the table to a Markdown file.
+        metadata_lookup (dict, optional): Mapping dictionary to replace numeric values with labels.
+
+    Returns:
+        str: Markdown formatted table.
+    """
+    category_stats = demo_stats.get(category_column, {})
+
+    if not category_stats:
+        return f"⚠️ No demographic data available for {category_column}\n"
+
+    # ✅ Handle nested dictionaries properly
+    flat_data = {}
+    for key, value in category_stats.items():
+        if isinstance(value, dict):  # Handle histogram or grouped statistics
+            for sub_key, sub_value in value.items():
+                # ✅ Replace numeric keys with human-readable labels
+                if metadata_lookup and category_column in metadata_lookup:
+                    readable_label = metadata_lookup[category_column].get(sub_key, sub_key)
+                else:
+                    readable_label = f"{category_column} ({sub_key})"  # Fallback label
+                
+                flat_data[readable_label] = sub_value
+        else:
+            flat_data[key] = value
+
+    # Convert flattened data to DataFrame
+    stats_df = pd.DataFrame(list(flat_data.items()), columns=["Category", category_column])
+
+    if stats_df.empty:
+        return f"⚠️ No data available for {category_column}\n"
+
+    markdown_table = stats_df.to_markdown(index=False)
+
+    if save_file:
+        with open(save_file, "a") as md:
+            md.write(f"### {category_column} Statistics\n")
+            md.write(markdown_table + "\n\n")
+
+    return markdown_table
+
+def display_demographic_data(config, df, category_column, numeric_column, demo_stats, save_file=None, metadata_lookup=None):
+    """
+    Displays demographic data as a Markdown table or a saved chart.
+
+    - Calls `dual_axis_histogram_box_chart()` for charts if enabled.
+    - Calls `generate_markdown_table()` for tables if enabled.
+    - Uses metadata lookup for replacing numeric values with labels.
 
     Parameters:
         config (dict): Configuration loaded from config.json.
@@ -281,34 +263,42 @@ def display_demographic_data(config, df, category_column, numeric_column, demo_s
         category_column (str): The categorical variable for the x-axis (e.g., "Gender", "Gene Count").
         numeric_column (str): The numeric variable for the box plot (e.g., "Age at dx").
         demo_stats (dict): Precomputed statistics from `baseline_demographic()`.
-
-    Returns:
-        None
+        save_file (str, optional): If provided, saves the output instead of displaying it.
+        metadata_lookup (dict, optional): Used to map numeric values to labels.
     """
-    # Extract stats display mode from config
-    display_mode = "table"  # Default
-    for item in config["stats"].get("baseline_demographic", []):
-        if item.get("name") == category_column:
-            display_mode = item.get("display_mode", "table")
 
+    demographic_config = next((item for item in config["stats"].get("baseline_demographic", []) if item.get("name") == category_column), None)
+
+    if not demographic_config:
+        print(f"⚠️ Warning: No configuration found for {category_column}")
+        return
+
+    display_mode = demographic_config.get("display_mode", "table")
+
+    # ✅ Handle Charts
+    if display_mode == "chart" and "histogram_variable" in demographic_config and "numeric_variable" in demographic_config:
+        if category_column in demo_stats and "histogram" in demo_stats[category_column]:
+            chart_filename = f"{category_column}_chart.png" if save_file else None
+
+            dual_axis_histogram_box_chart(
+                histogram_data=demo_stats[category_column]["histogram"],
+                df=df,
+                x_label=category_column,
+                y1_label="Patient Count",
+                y2_label=numeric_column,
+                title=f"{category_column} vs. {numeric_column} Distribution",
+                color_config=config["ui"]["histogram"]["color"],
+                box_opacity=config["ui"]["boxplot"].get("opacity", 0.5),
+                box_width=config["ui"]["boxplot"].get("width", 0.5),
+                save_file=chart_filename
+            )
+
+            # ✅ Embed chart in Markdown
+            if save_file:
+                with open(save_file, "a") as md:
+                    md.write(f"### {category_column} Distribution\n")
+                    md.write(f"![{category_column} Chart]({chart_filename})\n\n")
+
+    # ✅ Handle Tables
     if display_mode == "table":
-        print(f"\n📊 **Displaying {category_column} Demographic as a Table:**")
-
-        # Retrieve statistics for the given category
-        category_stats = demo_stats.get(category_column, {})
-
-        if category_stats:
-            # Convert dictionary stats to DataFrame for markdown rendering
-            stats_df = pd.DataFrame.from_dict(category_stats, orient="index", columns=[category_column])
-
-            # ✅ Display DataFrame in Markdown format
-            print(stats_df.to_markdown(index=True))  # Prints markdown-formatted table
-
-        else:
-            print(f"⚠️ Warning: No demographic data available for {category_column}")
-
-    elif display_mode == "chart":
-        print(f"⚠️ Chart mode selected. This function does not handle charts. Use `dual_axis_histogram_box_chart()`.")
-
-    else:
-        print(f"⚠️ Unknown display mode '{display_mode}' for {category_column}. Defaulting to table.")
+        generate_markdown_table(category_column, demo_stats, save_file, metadata_lookup)
