@@ -1,6 +1,7 @@
-from data import load_and_clean_data, generate_metadata_mapping
-from stats import baseline_demographic, multivariate_linear_regression
+from data import load_and_clean_data, generate_metadata_mapping, data_derive, data_fitting
+from stats import baseline_demographic, multivariate_linear_regression, cox_regression, km_estimate
 from ui import dual_axis_histogram_box_chart, fetch_boxplot_data, styled_print, display_demographic_data
+from lifelines import CoxPHFitter
 import pandas as pd
 import json
 
@@ -13,15 +14,21 @@ def main():
     file_path = "data/data.xlsx"
     aggregated, header_metadata = load_and_clean_data(file_path)
 
-    # Ensure 'Gene Count' column exists if needed
-    if "Gene" in aggregated.columns:
-        aggregated["Gene Count"] = aggregated["Gene"].apply(lambda x: len(x) if isinstance(x, list) else 0)
+    data_fitting(aggregated,['Dx OS'])
+
+    # derive data for Cox and KM
+    aggregated, header_metadata = data_derive(aggregated)
 
     # Generate metadata lookup
     metadata_lookup = generate_metadata_mapping(header_metadata)
 
-    print(aggregated)
+    # Cox regression
+    cox_model = cox_regression(aggregated)
+    cox_model.print_summary()
 
+
+    # Kaplan-Meier
+    km_estimate(aggregated)
     # Extract UI settings for colors
     histogram_colors = config["ui"].get("histogram", {}).get("color", {})
     boxplot_settings = config["ui"].get("boxplot", {})

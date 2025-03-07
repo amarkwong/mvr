@@ -43,28 +43,24 @@ def combine_gene_info(row):
 
 def generate_metadata_mapping(header_metadata):
     """
-    Parses the header_metadata dictionary and creates a lookup mapping for categorical values.
+    Converts the metadata dictionary into a lookup format where numeric values are mapped to labels.
 
     Parameters:
-        header_metadata (dict): Dictionary containing metadata descriptions.
+        header_metadata (dict): Dictionary with column metadata mappings.
 
     Returns:
-        dict: A nested dictionary where keys are column names, and values are dictionaries mapping numeric codes to labels.
+        dict: Reformatted dictionary where numeric values are mapped to readable labels.
     """
-    mapping_dict = {}
+    metadata_lookup = {}
 
-    for column, mapping_str in header_metadata.items():
-        value_mapping = {}
-        matches = re.findall(r"(\d+)\s*[=:-]?\s*([\w\s]+)", mapping_str)  # Handles "1 = label" or "1 - label" formats
-        
-        for num, label in matches:
-            if label.strip():  # Ensure the label is not empty
-                value_mapping[int(num)] = label.strip().lower()  # Normalize labels
+    for column, mapping in header_metadata.items():
+        if isinstance(mapping, dict):  # ✅ Fix: Handle dictionary mappings
+            metadata_lookup[column] = mapping  # Directly store if it's a dict
+        elif isinstance(mapping, str):  # ✅ Handle string-based mappings
+            matches = re.findall(r"(\d+)\s*[=:-]?\s*([\w\s]+)", mapping)  
+            metadata_lookup[column] = {int(num): label for num, label in matches}
 
-        if value_mapping:  # Only store mappings that are valid
-            mapping_dict[column] = value_mapping
-
-    return mapping_dict
+    return metadata_lookup
 
 def load_and_clean_data(file_path):
     """
@@ -116,7 +112,68 @@ def load_and_clean_data(file_path):
     
     return aggregated, header_metadata
 
-def clean_data_for_ols_by_column(df, columns_to_check, config_path="config.json"):
+
+def data_derive(df, config_path="config.json"):
+    """
+    Derives new columns based on rules specified in the config.json.
+
+    - Computes `Gene Count` as the number of gene mutations.
+    - Categorizes `Ferritin` levels into normal, inflammatory, or overload.
+    - Categorizes `BM Iron Stores` into reduced, normal, or increased.
+
+    Parameters:
+        df (pd.DataFrame): The input dataframe.
+        config_path (str): Path to the config file.
+
+    Returns:
+        pd.DataFrame: Updated dataframe with new derived columns.
+        dict: Updated metadata dictionary for label mapping.
+    """
+    # Load configuration
+    with open(config_path, "r") as f:
+        config = json.load(f)
+
+    # Extract derivation settings
+    derivation_config = config.get("data", {}).get("data_derivation", {})
+    columns_to_derive = derivation_config.get("columns", [])
+
+    # Initialize metadata storage for category mappings
+    header_metadata = {}
+
+    for col_def in columns_to_derive:
+        col_name = col_def["name"]
+        base_col = col_def["base_column"]
+        method = col_def["method"]
+
+        if method == "Count" and base_col in df.columns:
+            # ✅ Method: Count - Count items in lists
+            df[col_name] = df[base_col].apply(lambda x: len(x) if isinstance(x, list) else 0)
+
+        elif method == "mapping" and base_col in df.columns:
+            # ✅ Method: Mapping - Convert numeric values into categories
+            mapping_rules = col_def.get("map", [])
+
+            def map_value(value):
+                """Applies mapping rules to determine the categorical class."""
+                for rule in mapping_rules:
+                    category, criteria = list(rule.items())[0]
+                    floor = criteria.get("floor", float("-inf"))
+                    ceiling = criteria.get("ceiling", float("inf"))
+                    int_value = criteria["int_value"]
+
+                    if floor <= value < ceiling:
+                        return int_value
+                return None  # Return None if no mapping rule matches
+
+            # Apply mapping function to dataframe
+            df[col_name] = df[base_col].apply(lambda x: map_value(x) if pd.notna(x) else None)
+
+            # Store category mappings for visualization
+            header_metadata[col_name] = {v["int_value"]: k for rule in mapping_rules for k, v in rule.items()}
+
+    return df, header_metadata
+
+def data_fitting(df, columns_to_check, config_path="config.json"):
     """
     Handles missing data based on predefined rules in the configuration file.
 
