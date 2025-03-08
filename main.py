@@ -1,6 +1,6 @@
-from data import load_and_clean_data, generate_metadata_mapping, data_derive, data_fitting
+from data import data_cleansing, generate_metadata_mapping, data_derive, data_fitting
 from stats import baseline_demographic, multivariate_linear_regression, cox_regression, km_estimate
-from ui import dual_axis_histogram_box_chart, fetch_boxplot_data, styled_print, display_demographic_data
+from ui import dual_axis_histogram_box_chart, fetch_boxplot_data, styled_print, display_demographic_data, plot_km_survival_curves
 from lifelines import CoxPHFitter
 import pandas as pd
 import json
@@ -12,23 +12,33 @@ def main():
 
     # Load and clean dataset
     file_path = "data/data.xlsx"
-    aggregated, header_metadata = load_and_clean_data(file_path)
+    aggregated, header_metadata = data_cleansing(file_path)
 
     data_fitting(aggregated,['Dx OS'])
+    data_fitting(aggregated,['Ferritin','TF Sats'])
 
     # derive data for Cox and KM
     aggregated, header_metadata = data_derive(aggregated)
+
+    print(aggregated[["TF Sats", "Ferritin", "Serum Iron Class"]].head())
+
+    print(aggregated[aggregated['TF Sats']<1])
 
     # Generate metadata lookup
     metadata_lookup = generate_metadata_mapping(header_metadata)
 
     # Cox regression
-    cox_model = cox_regression(aggregated)
-    cox_model.print_summary()
+    # cox_model = cox_regression(aggregated)
+    # cox_model.print_summary()
 
 
     # Kaplan-Meier
-    km_estimate(aggregated)
+    # ? Compute KM estimates (logic-only, no UI)
+    km_results = km_estimate(aggregated)
+
+    # ? Plot survival curves separately (UI-only)
+    plot_km_survival_curves(km_results)
+
     # Extract UI settings for colors
     histogram_colors = config["ui"].get("histogram", {}).get("color", {})
     boxplot_settings = config["ui"].get("boxplot", {})

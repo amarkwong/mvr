@@ -138,6 +138,13 @@ def km_estimate(df, config_path="config.json"):
         km_data = {}
 
         if group_column and group_column in km_df.columns:
+            df[group_column] = df[group_column].astype(int)  # ✅ Convert to integer
+            unique_groups = df[group_column].unique()
+
+            if len(unique_groups) < 2:
+                print(f"⚠️ Warning: Only one group found in {group_column}. Skipping stratified KM plot.")
+                continue  # Skip plotting if there's only one group
+
             # ✅ Stratify KM analysis by group_column
             for group in km_df[group_column].dropna().unique():
                 group_df = km_df[km_df[group_column] == group]

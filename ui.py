@@ -312,3 +312,29 @@ def display_demographic_data(config, df, category_column, numeric_column, demo_s
 
     else:
         print(f"⚠️ Unknown display mode '{display_mode}' for {category_column}. Defaulting to table.")
+
+
+# * Chart plotting
+def plot_km_survival_curves(km_results):
+    """
+    Plots Kaplan-Meier survival curves from precomputed KM models.
+
+    Parameters:
+        km_results (dict): Dictionary containing fitted Kaplan-Meier models for each group.
+
+    Returns:
+        None (displays plots).
+    """
+    for group_name, km_models in km_results.items():
+        plt.figure(figsize=(8, 5))
+
+        for subgroup, kmf in km_models.items():
+            kmf.plot_survival_function(label=subgroup)
+
+        # ✅ Formatting the plot
+        plt.title(f"Kaplan-Meier Survival Curve ({group_name})")
+        plt.xlabel("Time (Months)")
+        plt.ylabel("Survival Probability")
+        plt.legend(title=group_name if group_name != "Overall" else "Survival")
+        plt.grid(True)
+        plt.show()

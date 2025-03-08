@@ -3,6 +3,73 @@ import os
 import re
 import json
 from ui import styled_print
+from openpyxl import load_workbook
+
+# * Utilitiy functions
+def detect_percentage_format(file_path, sheet_name=None):
+    """
+    Detects which columns in an Excel sheet have percentage formatting.
+
+    Parameters:
+        file_path (str): Path to the Excel file.
+        sheet_name (str, optional): Sheet to inspect. Defaults to the first sheet.
+
+    Returns:
+        dict: Mapping of column names to a boolean indicating if they are formatted as percentages.
+    """
+    wb = load_workbook(file_path, data_only=True)
+    ws = wb[sheet_name] if sheet_name else wb.active  # Use the first sheet if none specified
+
+    percentage_columns = {}
+
+    for col in ws.iter_cols():
+        col_letter = col[0].column_letter
+        header = col[0].value  # Assuming first row contains column headers
+        if not header:
+            continue
+
+        # Check if any cell in this column has a percentage format
+        has_percentage = any(
+            cell.number_format in ["0%", "0.00%", "0.0%", "0.000%"] for cell in col if cell.value is not None
+        )
+
+        if has_percentage:
+            percentage_columns[header] = True
+
+    return percentage_columns
+
+
+def standardize_numeric_columns(df, percentage_columns):
+    """
+    Standardizes numeric columns by:
+      - Converting string values (e.g., "90%") into numbers.
+      - Ensuring consistent formatting across all rows.
+
+    Parameters:
+        df (pd.DataFrame): The dataset.
+        percentage_columns (dict): Dictionary mapping column names to whether they are percentages.
+
+    Returns:
+        pd.DataFrame: The modified DataFrame with standardized numeric formats.
+    """
+    for col, is_percentage in percentage_columns.items():
+        if col in df.columns:
+            # ✅ Convert any percentage strings like "90%" to numeric values
+            df[col] = df[col].astype(str).str.replace("%", "").str.strip()
+            df[col] = pd.to_numeric(df[col], errors="coerce")  # Convert to numbers safely
+
+            # ✅ Identify inconsistent values
+            inconsistent_values = (df[col] > 1).sum() > 0  # If values > 1, they are likely whole numbers
+
+            if is_percentage and inconsistent_values:
+                print(f"📌 Converting {col} from percentage to decimal.")
+                df[col] = df[col] / 100  # Convert whole numbers (e.g., 90 → 0.9)
+
+            elif not is_percentage and (df[col] < 1).sum() > 0:
+                print(f"📌 Converting {col} from decimal to percentage scale.")
+                df[col] = df[col] * 100  # Convert decimals (e.g., 0.9 → 90)
+
+    return df
 
 def process_headers(columns):
     header_names = []
@@ -62,15 +129,10 @@ def generate_metadata_mapping(header_metadata):
 
     return metadata_lookup
 
-def load_and_clean_data(file_path):
+def data_cleansing(file_path):
     """
-    Load Excel data and aggregate rows by 'UR' so that non-gene columns remain as in the first row,
-    and gene-related columns are collected into lists. Then combine the gene-related lists into a single
-    nested "Gene" list.
-    
-    This function does NOT apply a global forward-fill, so that if a column like 'Ferritin' is null
-    in the first row for a patient, it remains null.
-    
+    Load Excel data, aggregate rows by 'UR', and ensure consistent numeric formats.
+
     Returns:
       - aggregated: the cleaned, aggregated DataFrame.
       - header_metadata: dictionary of header descriptions.
@@ -78,83 +140,84 @@ def load_and_clean_data(file_path):
     na_values = ["NA", "na", "N/A", "n/a", "N/a"]
     df = pd.read_excel(file_path, engine="openpyxl", na_values=na_values)
     df["UR"] = df["UR"].ffill()
-    # Process headers.
+
+    # Detect numeric columns with mixed formats
+    percentage_columns = detect_percentage_format(file_path)
+
+    # Standardize numeric formats
+    df = standardize_numeric_columns(df, percentage_columns)
+
+    # Process headers
     raw_headers = list(df.columns)
     new_columns, header_metadata = process_headers(raw_headers)
     df.columns = new_columns
 
-    # Sort by patient identifier (UR) to ensure rows for the same patient remain together.
+    # Sort by patient identifier (UR) to ensure rows for the same patient remain together
     if "UR" in df.columns:
         df = df.sort_values("UR")
-    
-    # Define gene-related columns.
+
+    # Define gene-related columns
     gene_columns = ["Gene", "VAF% G1", "Tier", "Variant description"]
-    # (No forward fill is applied here, so that each raw row remains intact.)
-    
-    # Build an aggregation dictionary.
+
+    # Build an aggregation dictionary
     agg_dict = {}
     for col in df.columns:
         if col == "UR":
-            continue  # Grouping key.
+            continue  # Grouping key
         if col in gene_columns:
-            # Using lambda with a default parameter to capture the current col.
             agg_dict[col] = lambda x, col=col: x.tolist()
         else:
             agg_dict[col] = lambda x: x.dropna().iloc[0] if not x.dropna().empty else None
-    
+
     aggregated = df.groupby("UR", as_index=False).agg(agg_dict)
-    
-    # Combine gene-related columns into a single nested "Gene" list.
+
+    # Combine gene-related columns into a single nested "Gene" list
     aggregated["Gene"] = aggregated.apply(combine_gene_info, axis=1)
     aggregated = aggregated.drop(columns=["VAF% G1", "Tier", "Variant description"])
-    
-    aggregated.to_json("merged_output.json", orient="records", indent=2)
-    
-    return aggregated, header_metadata
 
+    aggregated.to_json("merged_output.json", orient="records", indent=2)
+
+    return aggregated, header_metadata
 
 def data_derive(df, config_path="config.json"):
     """
-    Derives new columns based on rules specified in the config.json.
+    Derives new columns based on rules specified in config.json.
 
-    - Computes `Gene Count` as the number of gene mutations.
-    - Categorizes `Ferritin` levels into normal, inflammatory, or overload.
-    - Categorizes `BM Iron Stores` into reduced, normal, or increased.
+    - Supports Count (for lists)
+    - Supports Mapping (numeric ranges to categories)
+    - Supports Conditional Logic (multi-column conditions)
 
     Parameters:
-        df (pd.DataFrame): The input dataframe.
+        df (pd.DataFrame): The dataset.
         config_path (str): Path to the config file.
 
     Returns:
-        pd.DataFrame: Updated dataframe with new derived columns.
-        dict: Updated metadata dictionary for label mapping.
+        pd.DataFrame: Updated dataset with derived columns.
+        dict: Updated metadata mapping for categorical labels.
     """
-    # Load configuration
+    # ✅ Load configuration
     with open(config_path, "r") as f:
         config = json.load(f)
 
-    # Extract derivation settings
     derivation_config = config.get("data", {}).get("data_derivation", {})
     columns_to_derive = derivation_config.get("columns", [])
 
-    # Initialize metadata storage for category mappings
-    header_metadata = {}
+    header_metadata = {}  # Stores category labels
 
     for col_def in columns_to_derive:
         col_name = col_def["name"]
-        base_col = col_def["base_column"]
         method = col_def["method"]
 
-        if method == "Count" and base_col in df.columns:
-            # ✅ Method: Count - Count items in lists
-            df[col_name] = df[base_col].apply(lambda x: len(x) if isinstance(x, list) else 0)
+        if method == "Count":
+            base_col = col_def["base_column"]
+            if base_col in df.columns:
+                df[col_name] = df[base_col].apply(lambda x: len(x) if isinstance(x, list) else 0)
 
-        elif method == "mapping" and base_col in df.columns:
-            # ✅ Method: Mapping - Convert numeric values into categories
+        elif method == "mapping":
+            base_col = col_def["base_column"]
             mapping_rules = col_def.get("map", [])
 
             def map_value(value):
-                """Applies mapping rules to determine the categorical class."""
                 for rule in mapping_rules:
                     category, criteria = list(rule.items())[0]
                     floor = criteria.get("floor", float("-inf"))
@@ -163,13 +226,42 @@ def data_derive(df, config_path="config.json"):
 
                     if floor <= value < ceiling:
                         return int_value
-                return None  # Return None if no mapping rule matches
+                return None  # No match
 
-            # Apply mapping function to dataframe
-            df[col_name] = df[base_col].apply(lambda x: map_value(x) if pd.notna(x) else None)
+            if base_col in df.columns:
+                df[col_name] = df[base_col].apply(lambda x: map_value(x) if pd.notna(x) else None)
 
-            # Store category mappings for visualization
+            # ✅ Store label mapping
             header_metadata[col_name] = {v["int_value"]: k for rule in mapping_rules for k, v in rule.items()}
+
+        elif method == "conditional":
+            conditions = col_def.get("conditions", [])
+            default_value = col_def.get("default", {}).get("value", None)
+            default_label = col_def.get("default", {}).get("label", "Unknown")
+
+            def evaluate_conditions(row):
+                for cond in conditions:
+                    if_clause = cond.get("if", {})
+                    then_clause = cond.get("then", {})
+
+                    # ✅ Check if all conditions are met
+                    if all(
+                        (
+                            (row[col] > crit["greater_than"]) if "greater_than" in crit else True and
+                            (row[col] < crit["less_than"]) if "less_than" in crit else True
+                        )
+                        for col, crit in if_clause.items()
+                    ):
+                        return then_clause["value"]
+
+                return default_value  # Return default if no conditions match
+
+            # ✅ Apply conditions to dataset
+            df[col_name] = df.apply(evaluate_conditions, axis=1)
+
+            # ✅ Store labels in metadata
+            header_metadata[col_name] = {cond["then"]["value"]: cond["then"]["label"] for cond in conditions}
+            header_metadata[col_name][default_value] = default_label
 
     return df, header_metadata
 
