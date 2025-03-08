@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+import json
 import sys
 import re
 import statsmodels.api as sm
@@ -315,26 +316,49 @@ def display_demographic_data(config, df, category_column, numeric_column, demo_s
 
 
 # * Chart plotting
-def plot_km_survival_curves(km_results):
+def plot_km_survival_curves(km_results, config_path="config.json"):
     """
-    Plots Kaplan-Meier survival curves from precomputed KM models.
+    Plots Kaplan-Meier survival curves with customizable colors, legends, and captions.
 
     Parameters:
         km_results (dict): Dictionary containing fitted Kaplan-Meier models for each group.
+        config_path (str): Path to the configuration file.
 
     Returns:
         None (displays plots).
     """
+    # ✅ Load configuration
+    with open(config_path, "r") as f:
+        config = json.load(f)
+
+    km_config = config.get("ui", {}).get("km_plot", {})
+    show_ci = km_config.get("show_confidence_interval", True)  # Default: Show CI
+    show_legend = km_config.get("show_legend", True)  # Default: Show legend
+    captions = km_config.get("captions", {})  # Default: No captions
+    palette = km_config.get("palette", {})  # ✅ Custom line colors
+
     for group_name, km_models in km_results.items():
         plt.figure(figsize=(8, 5))
 
         for subgroup, kmf in km_models.items():
-            kmf.plot_survival_function(label=subgroup)
+            color = palette.get(subgroup, palette.get("default", "#000000"))  # ✅ Get color from config
+            kmf.plot_survival_function(label=subgroup, ci_show=show_ci, color=color)  # ✅ Apply color
 
         # ✅ Formatting the plot
         plt.title(f"Kaplan-Meier Survival Curve ({group_name})")
         plt.xlabel("Time (Months)")
         plt.ylabel("Survival Probability")
-        plt.legend(title=group_name if group_name != "Overall" else "Survival")
+        
+        if show_legend:
+            plt.legend(title=group_name if group_name != "Overall" else "Survival")
+        else:
+            plt.legend().remove()  # ✅ Remove legend if configured
+
         plt.grid(True)
+
+        # ✅ Show caption if available
+        caption = captions.get(group_name, "")
+        if caption:
+            plt.figtext(0.5, -0.1, caption, wrap=True, horizontalalignment='center', fontsize=10)
+
         plt.show()

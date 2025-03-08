@@ -15,7 +15,7 @@ def main():
     aggregated, header_metadata = data_cleansing(file_path)
 
     data_fitting(aggregated,['Dx OS'])
-    data_fitting(aggregated,['Ferritin','TF Sats'])
+    data_fitting(aggregated,['Ferritin','TF Sats','BM Iron stores'])
 
     # derive data for Cox and KM
     aggregated, header_metadata = data_derive(aggregated)
@@ -23,6 +23,21 @@ def main():
     print(aggregated[["TF Sats", "Ferritin", "Serum Iron Class"]].head())
 
     print(aggregated[aggregated['TF Sats']<1])
+
+    # Count events (deaths) and censoring
+    group = "BM Iron stores Class"  # Change if needed
+    group_name = "reduced"  # Name of the class in the dataset
+
+    subset = aggregated[aggregated[group] == 0]
+    print("subset",subset)
+    deaths = subset[subset["Death"] == 1].shape[0]
+    censored = subset[subset["Death"] == 0].shape[0]
+    total = subset.shape[0]
+
+    print(f"Group: {group_name}")
+    print(f"Total Patients: {total}")
+    print(f"Deaths: {deaths}")
+    print(f"Censored: {censored}")
 
     # Generate metadata lookup
     metadata_lookup = generate_metadata_mapping(header_metadata)

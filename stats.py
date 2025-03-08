@@ -90,6 +90,10 @@ def baseline_demographic(df, config):
 
     return result  # Only contains stats for table mode
 
+import json
+import pandas as pd
+from lifelines import KaplanMeierFitter
+
 def km_estimate(df, config_path="config.json"):
     """
     Computes Kaplan-Meier survival estimates based on settings in config.json.
@@ -105,7 +109,7 @@ def km_estimate(df, config_path="config.json"):
     with open(config_path, "r") as f:
         config = json.load(f)
 
-    # ✅ Extract KM settings (now an array)
+    # ✅ Extract KM settings
     km_configs = config.get("stats", {}).get("km_estimate", [])
 
     if not isinstance(km_configs, list):
@@ -132,24 +136,48 @@ def km_estimate(df, config_path="config.json"):
         km_df = df.dropna(subset=[time_column, event_column])
         km_df[event_column] = km_df[event_column].astype(int)  # Ensure event column is an integer
 
+        print('df before filter',km_df)
+
+        filtered_df = km_df[(km_df["BM Iron stores Class"] == 0) & (km_df["Death"] == 1)][["UR"]]
+
+        print('filtered df',filtered_df)
+
         # ✅ Initialize KM model
         kmf = KaplanMeierFitter()
 
         km_data = {}
 
         if group_column and group_column in km_df.columns:
-            df[group_column] = df[group_column].astype(int)  # ✅ Convert to integer
-            unique_groups = df[group_column].unique()
+            # ✅ Convert column to integer if necessary
+            km_df[group_column] = pd.to_numeric(km_df[group_column], errors="coerce").fillna(0).astype(int)
+
+            unique_groups = sorted(km_df[group_column].unique())  # ✅ Ensure correct ordering
 
             if len(unique_groups) < 2:
                 print(f"⚠️ Warning: Only one group found in {group_column}. Skipping stratified KM plot.")
                 continue  # Skip plotting if there's only one group
 
-            # ✅ Stratify KM analysis by group_column
-            for group in km_df[group_column].dropna().unique():
-                group_df = km_df[km_df[group_column] == group]
-                kmf.fit(group_df[time_column], event_observed=group_df[event_column], label=str(group))
-                km_data[str(group)] = kmf  # Store fitted KM model
+            # ✅ Extract custom group labels from config (if available)
+            group_labels = {
+                str(item["value"]): item["label"]
+                for item in km_config.get("group_label", [])
+            }
+            print(f"🔹 Loaded group labels: {group_labels}")  # Debugging output
+
+            # ✅ Loop over groups
+            for group in unique_groups:
+                group_str = str(group)  # Convert group to string for lookup
+                group_df = km_df[km_df[group_column] == group].copy()
+
+                # ✅ Fetch custom label from config or fallback
+                unique_label = group_labels.get(group_str, f"{group_column}: {group}")
+
+                print(f"\n🧐 Processing group: {group} (n={len(group_df)}) - Assigned Label: {unique_label}")
+
+                # ✅ Fit the KM model with correct label
+                kmf = KaplanMeierFitter()
+                kmf.fit(group_df[time_column], event_observed=group_df[event_column], label=unique_label)
+                km_data[unique_label] = kmf  # ✅ Store using the correct label
 
         else:
             # ✅ Overall KM analysis without stratification
@@ -157,6 +185,9 @@ def km_estimate(df, config_path="config.json"):
             km_data["Overall"] = kmf  # Store fitted KM model
 
         km_results[group_column if group_column else "Overall"] = km_data  # Store results
+
+    print("\n📊 Final KM Results:")
+    print(km_results)  # ✅ Debug output to verify structure
 
     return km_results
 

@@ -224,7 +224,7 @@ def data_derive(df, config_path="config.json"):
                     ceiling = criteria.get("ceiling", float("inf"))
                     int_value = criteria["int_value"]
 
-                    if floor <= value < ceiling:
+                    if floor <= value <= ceiling:
                         return int_value
                 return None  # No match
 
