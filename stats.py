@@ -162,8 +162,6 @@ def km_estimate(df, config_path="config.json"):
                 str(item["value"]): item["label"]
                 for item in km_config.get("group_label", [])
             }
-            print(f"🔹 Loaded group labels: {group_labels}")  # Debugging output
-
             # ✅ Loop over groups
             for group in unique_groups:
                 group_str = str(group)  # Convert group to string for lookup
@@ -191,6 +189,7 @@ def km_estimate(df, config_path="config.json"):
 
     return km_results
 
+
 def cox_regression(df, config_path="config.json"):
     """
     Runs a Cox Proportional Hazards model based on settings in config.json.
@@ -202,37 +201,33 @@ def cox_regression(df, config_path="config.json"):
     Returns:
         CoxPHFitter: The fitted Cox model.
     """
-    # ✅ Load configuration
+    # Load configuration
     with open(config_path, "r") as f:
         config = json.load(f)
 
-    # ✅ Extract Cox settings from config.json
+    # Extract Cox settings from config.json
     cox_config = config.get("stats", {}).get("cox_regression", {})
     time_column = cox_config.get("time_column", "Dx OS")
     event_column = cox_config.get("event_column", "Death")
     independent_variables = cox_config.get("independent_variables", [])
 
-    if not all(col in df.columns for col in [time_column, event_column] + independent_variables):
-        missing_cols = [col for col in [time_column, event_column] + independent_variables if col not in df.columns]
+    # Check if all required columns exist
+    required_cols = [time_column, event_column] + independent_variables
+    missing_cols = [col for col in required_cols if col not in df.columns]
+    if missing_cols:
         print(f"⚠️ Missing columns in dataset: {missing_cols}. Skipping Cox Regression.")
         return None
 
-    # ✅ Prepare dataset (drop missing values)
-    cox_df = df[[time_column, event_column] + independent_variables].dropna()
+    # Prepare dataset (drop missing values)
+    cox_df = df[required_cols].dropna()
 
-    # ✅ Convert categorical variables to dummy variables
+    # Convert categorical variables to dummy variables if necessary
     categorical_cols = [col for col in independent_variables if df[col].dtype == "object"]
-    cox_df = pd.get_dummies(cox_df, columns=categorical_cols, drop_first=True)
+    if categorical_cols:
+        cox_df = pd.get_dummies(cox_df, columns=categorical_cols, drop_first=True)
 
-    # ✅ Fit Cox Model
+    # Fit Cox Model
     cph = CoxPHFitter()
     cph.fit(cox_df, duration_col=time_column, event_col=event_column)
-
-    # ✅ Print summary results
-    print("\n📊 Cox Regression Summary:")
-    cph.print_summary()
-
-    # ✅ Plot hazard ratios
-    cph.plot()
     
-    return cph  # Return the fitted model for further analysis
+    return cph

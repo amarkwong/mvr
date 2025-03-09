@@ -1,6 +1,6 @@
 from data import data_cleansing, generate_metadata_mapping, data_derive, data_fitting
 from stats import baseline_demographic, multivariate_linear_regression, cox_regression, km_estimate
-from ui import dual_axis_histogram_box_chart, fetch_boxplot_data, styled_print, display_demographic_data, plot_km_survival_curves
+from ui import dual_axis_histogram_box_chart, fetch_boxplot_data, styled_print, display_demographic_data, plot_km_survival_curves, plot_cox_model
 from lifelines import CoxPHFitter
 import pandas as pd
 import json
@@ -10,48 +10,33 @@ def main():
     with open("config.json", "r") as f:
         config = json.load(f)
 
-    # Load and clean dataset
+    # * data preparation
+    # ? load and clean the data, extract metadata, unmerge cells 
     file_path = "data/data.xlsx"
     aggregated, header_metadata = data_cleansing(file_path)
 
-    data_fitting(aggregated,['Dx OS'])
-    data_fitting(aggregated,['Ferritin','TF Sats','BM Iron stores'])
+    # ? fit the missing DxOS by calculating from other columns
+    aggregated = data_fitting(aggregated,['Dx OS'])
+    # ? fit the missing data with the config method
+    aggregated = data_fitting(aggregated,['Ferritin','TF Sats','BM Iron stores'])
 
-    # derive data for Cox and KM
+    # ? derive data for Cox and KM
     aggregated, header_metadata = data_derive(aggregated)
 
-    print(aggregated[["TF Sats", "Ferritin", "Serum Iron Class"]].head())
-
-    print(aggregated[aggregated['TF Sats']<1])
-
-    # Count events (deaths) and censoring
-    group = "BM Iron stores Class"  # Change if needed
-    group_name = "reduced"  # Name of the class in the dataset
-
-    subset = aggregated[aggregated[group] == 0]
-    print("subset",subset)
-    deaths = subset[subset["Death"] == 1].shape[0]
-    censored = subset[subset["Death"] == 0].shape[0]
-    total = subset.shape[0]
-
-    print(f"Group: {group_name}")
-    print(f"Total Patients: {total}")
-    print(f"Deaths: {deaths}")
-    print(f"Censored: {censored}")
-
-    # Generate metadata lookup
+    # ? Generate metadata lookup
     metadata_lookup = generate_metadata_mapping(header_metadata)
 
-    # Cox regression
-    # cox_model = cox_regression(aggregated)
-    # cox_model.print_summary()
+    # * stats
+    # ? Cox regression and plotting
+    cox_model = cox_regression(aggregated)
 
+    plot_cox_model(cox_model)
 
-    # Kaplan-Meier
+    # Kaplan-Meier 
     # ? Compute KM estimates (logic-only, no UI)
     km_results = km_estimate(aggregated)
 
-    # ? Plot survival curves separately (UI-only)
+    # ? Plot survival curves separDisplaying Gene Count vs Age at dx as ately (UI-only)
     plot_km_survival_curves(km_results)
 
     # Extract UI settings for colors
@@ -110,7 +95,7 @@ def main():
             else:
                 print(f"⚠️ Warning: One or more columns missing for {histogram_variable} vs {numeric_variable}. Skipping.")
 
-    # Run Multivariate Linear Regression
+    # Run Multivariate OLS Linear Regression
     styled_print("Multivariate Linear Regression:", color="blue", style="bold")
     ols_settings = config["stats"].get("ols_setting", {})
     x_columns = ols_settings.get("x_columns", [])

@@ -362,3 +362,22 @@ def plot_km_survival_curves(km_results, config_path="config.json"):
             plt.figtext(0.5, -0.1, caption, wrap=True, horizontalalignment='center', fontsize=10)
 
         plt.show()
+
+def plot_cox_model(cph):
+    """
+    Plots the hazard ratios and prints the Cox model summary.
+    
+    Parameters:
+        cph (CoxPHFitter): The fitted Cox model.
+    """
+    if cph is None:
+        print("No Cox model to plot.")
+        return
+
+    # Print model summary in Markdown format
+    print("\n📊 Cox Regression Summary:")
+    print(cph.summary.to_markdown())
+
+    # Plot the hazard ratios (forest plot)
+    cph.plot()
+    plt.show()  # Explicitly show the plot
