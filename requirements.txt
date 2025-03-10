@@ -5,3 +5,4 @@ statsmodels
 colorama
 tabulate
 seaborn
+lifelines
