@@ -1,0 +1,227 @@
+{
+  "file": {
+    "_comment": "can only handle xlsx file for now",
+    "data_path": "data/data.xls",
+    "report_path": "analysis.md"
+  },
+  "data": {
+    "data_cleansing": {
+      "_comment":"regroup some rows for merged id column, so each id takes one row in the data frame",
+      "id_column": "UR",
+      "aggregate": [
+        {
+          "aggregate_column": "Gene",
+          "column_mapping": [
+            { "old_name": "Gene", "new_name": "name" },
+            { "old_name": "VAF% G1", "new_name": "VAF% G1" },
+            { "old_name": "Tier", "new_name": "Tier" },
+            {
+              "old_name": "Variant description",
+              "new_name": "Variant description"
+            }
+          ]
+        }
+      ]
+    },
+    "data_fitting": {
+      "_comment": "allowed value: drop, mean, median, mode, zero, or a dictionary for calculated values",
+      "Ferritin": "mean",
+      "ELN 2022 Risk": "mean",
+      "BM Iron stores": "drop",
+      "TF Sats": "mean",
+      "Dx OS": {
+        "first_input": "Date last FollowUp (or death)",
+        "operator": "-",
+        "second_input": "Date AML dx",
+        "unit": "month"
+      }
+    },
+    "data_derivation": {
+      "_comment": "derive new columns from raw data",
+      "columns": [
+        {
+          "name": "Gene Count",
+          "base_column": "Gene",
+          "method": "Count"
+        },
+        {
+          "name": "Ferritin Class",
+          "base_column": "Ferritin",
+          "method": "mapping",
+          "map": [
+            { "normal": { "ceiling": 100, "int_value": 0 } },
+            {
+              "inflammatory": { "ceiling": 200, "floor": 100, "int_value": 1 }
+            },
+            { "overload": { "floor": 200, "int_value": 2 } }
+          ]
+        },
+        {
+          "_comment": "Gales method",
+          "name": "BM Iron stores Class",
+          "base_column": "BM Iron stores",
+          "method": "mapping",
+          "map": [
+            { "reduced": { "floor":0, "ceiling": 2, "int_value": 0 } },
+            {
+              "normal": { "ceiling": 3, "floor": 3, "int_value": 1 }
+            },
+            { "increased": {"floor": 4, "ceiling":6, "int_value": 2 } }
+          ]
+        },
+        {
+          "_comment": "Advanced Rule: Serum Iron Class based on TF Sats & Ferritin",
+          "name": "Serum Iron Class",
+          "method": "conditional",
+          "conditions": [
+            {
+              "if": {
+                "TF Sats": { "greater_than": 45 },
+                "Ferritin": { "greater_than": 200 }
+              },
+              "then": { "value": 2, "label": "Iron overload" }
+            },
+            {
+              "if": {
+                "TF Sats": { "less_than": 20 },
+                "Ferritin": { "greater_than": 100 }
+              },
+              "then": { "value": 1, "label": "Inflammatory" }
+            }
+          ],
+          "default": { "value": 0, "label": "Normal" }
+        }
+      ]
+    }
+  },
+  "stats": {
+    "baseline_demographic": [
+      {
+        "name": "Gene Count & Age at dx",
+        "histogram_variable": "Gene Count",
+        "numeric_variable": "Age at dx",
+        "display_mode": "chart",
+        "enabled": true
+      },
+      {
+        "name": "Gender & Age at dx",
+        "histogram_variable": "Gender",
+        "numeric_variable": "Age at dx",
+        "display_mode": "chart",
+        "enabled": true
+      },
+      {
+        "_comment": "stats is an array, each element hsa the name of df column and stats",
+        "name": "Gender, Gene Count & Median of Age at dx",
+        "display_mode": "table",
+        "stats": [
+          { "name": "Gender", "stats": "histogram" },
+          { "name": "Gene Count", "stats": "histogram" },
+          { "name": "Age at dx", "stats": "median" }
+        ],
+        "enabled": true
+      }
+    ],
+    "ols_setting": {
+      "_comment": "pick the proper variables and dependent variable here",
+      "x_columns": [
+        "Age at dx",
+        "ELN 2022 Risk",
+        "BM Iron stores",
+        "Ferritin",
+        "TF Sats",
+        "Allograft"
+      ],
+      "y_column": "Dx OS",
+      "enabled": true
+    },
+    "cox_regression": {
+      "time_column": "Dx OS",
+      "event_column": "Death",
+      "independent_variables": ["BM Iron stores Class", "Age>60", "Gender"],
+      "enabled":true
+    },
+    "km_estimate": [
+      {
+        "time_column": "Dx OS",
+        "event_column": "Death",
+        "group_column": "BM Iron stores Class",
+        "group_label": [
+          {
+            "value":0,
+            "label":"reduced"
+          },
+          {
+            "value":1,
+            "label":"normal"
+          },
+          {
+            "value":2,
+            "label":"increased"
+          }
+        ],
+        "enabled": true
+      },
+      {
+        "time_column": "Dx OS",
+        "event_column": "Death",
+        "group_column": "Age>60",
+        "group_label": [
+          {
+            "value": 1,
+            "label": "Age>60"
+          },
+          {
+            "value": 0,
+            "label": "Age<60"
+          }
+        ],
+        "enabled": true
+      }
+    ]
+  },
+  "ui": {
+    "_comment": "tweak this config to set the color palette for your chart",
+    "category": {
+      "color": {
+        "male": "#457b9d",
+        "female": "#e63946",
+        "default": "#83c5be"
+      }
+    },
+    "boxplot": {
+      "color": {
+        "male": "#118ab2",
+        "female": "#ef476f",
+        "default": "#06d6a0",
+        "opacity": 0.2
+      },
+      "width": 0.3,
+      "_comment": "width 0 -> 1, narrow -> full width"
+    },
+    "ols": {
+      "format": "summary",
+      "_comment": "can choose from summary,tabluate,formula"
+    },
+    "km_plot": {
+      "show_confidence_interval": false,
+      "show_legend": false,
+      "captions": {
+          "Age>60": "Survival curves comparing patients older and younger than 60 years."
+      },
+      "palette": {
+        "increased":"#118ab2",
+        "normal":"#06d6a0",
+        "reduced":"#ef476f",
+        "Age>60": "#1f77b4",
+        "Age<60": "#ff7f0e",
+        "default": "#2ca02c"
+      }
+    },
+    "table": {
+      "color": {
+        "background": "#ffffff"
+      }
+    }
+  }
+}

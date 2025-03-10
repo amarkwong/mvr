@@ -2,4 +2,4 @@ venv/
 data/
 __pycache__/
 *.pyc
-*.json
+merged_output.json

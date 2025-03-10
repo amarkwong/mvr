@@ -1,5 +1,41 @@
 # How to Use This Tool
 
+## Install
+Following steps will executed in your `Terminal` app
+- [ ] Install `brew` on your Mac if you haven't
+  ```
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+  ```
+- [ ] Use `brew` to install python
+  ```
+    brew update
+    brew install python
+  ```
+- [ ] Adding alias for python
+  ```
+    echo 'alias python="python3"' >> ~/.zshrc  # For zsh (default in macOS)
+    echo 'alias pip="pip3"' >> ~/.zshrc
+    source ~/.zshrc  # Apply changes
+  ```
+- [ ] update pip
+  ```
+  pip install --upgrade pip setuptools wheel
+  ```
+
+We should have python installed on our Mac now, next setup is to set up the virtual environment for python
+- [ ] create the virtual environment and install the dependencies
+```
+python -m venv venv
+source venv/bin/activate  # Activate the virtual environment
+pip install -r requirements.txt
+```
+
+- [ ] finally, put your data.xlsx under the data folder, and we can run some stats
+```
+python main.py
+```
+
+
 ## Data Requirements, Cleansing, Fitting, and Derivation
 
 - **Data File Path:**  
