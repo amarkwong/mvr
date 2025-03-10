@@ -365,8 +365,8 @@ def plot_km_survival_curves(km_results, config_path="config.json"):
 
 def plot_cox_model(cph):
     """
-    Plots the hazard ratios and prints the Cox model summary.
-    
+    Plots the hazard ratios with a log-scaled x-axis and prints the Cox model summary.
+
     Parameters:
         cph (CoxPHFitter): The fitted Cox model.
     """
@@ -378,6 +378,23 @@ def plot_cox_model(cph):
     print("\n📊 Cox Regression Summary:")
     print(cph.summary.to_markdown())
 
-    # Plot the hazard ratios (forest plot)
-    cph.plot()
-    plt.show()  # Explicitly show the plot
+    # Extract values directly from cph.summary
+    hr_exp = cph.summary["exp(coef)"]
+    ci_lower = cph.summary["exp(coef) lower 95%"]
+    ci_upper = cph.summary["exp(coef) upper 95%"]
+
+    # Plot the hazard ratios with log scale
+    plt.figure(figsize=(8, 5))
+    plt.errorbar(
+        hr_exp, hr_exp.index, xerr=[hr_exp - ci_lower, ci_upper - hr_exp],
+        fmt="o", color="black", ecolor="red", capsize=5
+    )
+    
+    plt.xscale("log")
+    plt.axvline(1, color='gray', linestyle='--')  # Reference line at HR = 1
+    plt.xlabel("Hazard Ratio (log scale)")
+    plt.ylabel("Features")
+    plt.title("Cox Proportional Hazards Model - Log Scale")
+    plt.grid(True, which="both", linestyle="--", linewidth=0.5)
+
+    plt.show()
