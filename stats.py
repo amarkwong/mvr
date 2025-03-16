@@ -2,7 +2,7 @@ import pandas as pd
 import statsmodels.api as sm
 from data import data_fitting
 from lifelines import CoxPHFitter, KaplanMeierFitter
-from ui import ols_to_markdown
+from ui import ols_to_markdown, draw_bar_chart_from_series, draw_boxplot
 import matplotlib.pyplot as plt
 import json
 
@@ -46,53 +46,14 @@ def multivariate_linear_regression(df, x_columns, y_column):
 
     # Print the regression summary.
     print(model.summary())
-def baseline_demographic(df, config):
-    """
-    Computes baseline demographic statistics based on `config["stats"]["baseline_demographic"]`.
 
-    Parameters:
-        df (pd.DataFrame): The dataset.
-        config (dict): Loaded JSON config containing demographic stats.
+def baseline_demographic(df,config,  metadata_lookup=None, mode="both"):
+    fig, ax1 = plt.subplots(figsize=(8, 5))
+    draw_bar_chart_from_series(ax1,df['Gender'],metadata_lookup)
 
-    Returns:
-        dict: A dictionary of computed statistics (only for 'table' mode).
-    """
-    result = {}
-
-    # Get demographic configurations from the config file
-    demographics = config.get("stats", {}).get("baseline_demographic", [])
-
-    for demographic in demographics:
-        if not demographic.get("enabled", True):
-            continue  # Skip disabled settings
-
-        display_mode = demographic.get("display_mode", "table")
-
-        if display_mode == "table":
-            # Table mode: Compute and store stats
-            stats_list = demographic.get("stats", [])  # Array of stats for this demographic
-            for stat_entry in stats_list:
-                variable = stat_entry.get("name")
-                metric = stat_entry.get("stats")
-
-                if variable not in df.columns:
-                    print(f"⚠️ Warning: Column '{variable}' not found in DataFrame. Skipping.")
-                    continue
-
-                if metric.lower() == "histogram":
-                    result[variable] = {"histogram": df[variable].value_counts(dropna=False).to_dict()}
-
-                elif metric.lower() == "median":
-                    result[variable] = {"median": df[variable].median()}
-
-                else:
-                    print(f"⚠️ Warning: Unsupported metric '{metric}' for '{variable}'")
-
-    return result  # Only contains stats for table mode
-
-import json
-import pandas as pd
-from lifelines import KaplanMeierFitter
+    draw_boxplot(ax1, df, 'Gender', 'Age at dx', metadata_lookup=metadata_lookup)
+    plt.show()
+   
 
 def km_estimate(df, config_path="config.json"):
     """

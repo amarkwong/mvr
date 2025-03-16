@@ -1,6 +1,6 @@
 from data import data_cleansing, generate_metadata_mapping, data_derive, data_fitting
 from stats import baseline_demographic, multivariate_linear_regression, cox_regression, km_estimate
-from ui import dual_axis_histogram_box_chart, fetch_boxplot_data, styled_print, display_demographic_data, plot_km_survival_curves, plot_cox_model
+from ui import dual_axis_histogram_box_chart, styled_print, display_demographic_data, plot_km_survival_curves, plot_cox_model, draw_bar_chart_from_series
 from lifelines import CoxPHFitter
 import pandas as pd
 import json
@@ -21,7 +21,10 @@ def main():
     aggregated = data_fitting(aggregated,['Ferritin','TF Sats','BM Iron stores'])
 
     # ? derive data for Cox and KM
-    aggregated, header_metadata = data_derive(aggregated)
+    aggregated,  new_metadata = data_derive(aggregated)
+
+    # Merge the new metadata into the existing header_metadata
+    header_metadata.update(new_metadata)
 
     # ? Generate metadata lookup
     metadata_lookup = generate_metadata_mapping(header_metadata)
@@ -39,61 +42,64 @@ def main():
     # ? Plot survival curves separDisplaying Gene Count vs Age at dx as ately (UI-only)
     plot_km_survival_curves(km_results)
 
-    # Extract UI settings for colors
-    histogram_colors = config["ui"].get("histogram", {}).get("color", {})
-    boxplot_settings = config["ui"].get("boxplot", {})
 
-    # Compute baseline demographics for 'table' mode
-    demo_stats = baseline_demographic(aggregated, config)
+    print('data',aggregated[['UR','Gender']])
+    baseline_demographic(aggregated,config, metadata_lookup )
+    # # Extract UI settings for colors
+    # histogram_colors = config["ui"].get("histogram", {}).get("color", {})
+    # boxplot_settings = config["ui"].get("boxplot", {})
 
-    # Display demographic data dynamically based on `config.json`
-    for demographic in config["stats"].get("baseline_demographic", []):
-        if not demographic.get("enabled", True):
-            continue  # Skip if disabled
+    # # Compute baseline demographics for 'table' mode
+    # demo_stats = baseline_demographic(aggregated, config)
 
-        display_mode = demographic.get("display_mode", "table")
-        histogram_variable = demographic.get("histogram_variable")
-        numeric_variable = demographic.get("numeric_variable")
+    # # Display demographic data dynamically based on `config.json`
+    # for demographic in config["stats"].get("baseline_demographic", []):
+    #     if not demographic.get("enabled", True):
+    #         continue  # Skip if disabled
 
-        if display_mode == "table":
-            display_demographic_data(config, aggregated, histogram_variable, numeric_variable, demo_stats)
+    #     display_mode = demographic.get("display_mode", "table")
+    #     histogram_variable = demographic.get("histogram_variable")
+    #     numeric_variable = demographic.get("numeric_variable")
 
-        elif display_mode == "chart":
-            if histogram_variable in aggregated.columns and numeric_variable in aggregated.columns:
-                print(f"\n📊 Displaying {histogram_variable} vs {numeric_variable} as a Chart:")
+    #     if display_mode == "table":
+    #         display_demographic_data(config, aggregated, histogram_variable, numeric_variable, demo_stats)
 
-                # ✅ Generate histogram data
-                histogram_data = aggregated[histogram_variable].value_counts().to_dict()
+    #     elif display_mode == "chart":
+    #         if histogram_variable in aggregated.columns and numeric_variable in aggregated.columns:
+    #             print(f"\n📊 Displaying {histogram_variable} vs {numeric_variable} as a Chart:")
 
-                # ✅ Check if metadata exists, else use raw values
-                metadata_mapping = metadata_lookup.get(histogram_variable, {})
-                histogram_data = {metadata_mapping.get(k, str(k)): v for k, v in histogram_data.items()}
+    #             # ✅ Generate histogram data
+    #             histogram_data = aggregated[histogram_variable].value_counts().to_dict()
 
-                # ✅ Apply metadata mapping to DataFrame for Seaborn boxplot
-                df_modified = aggregated.copy()
-                if metadata_mapping:
-                    df_modified[histogram_variable] = df_modified[histogram_variable].map(metadata_mapping)
+    #             # ✅ Check if metadata exists, else use raw values
+    #             metadata_mapping = metadata_lookup.get(histogram_variable, {})
+    #             histogram_data = {metadata_mapping.get(k, str(k)): v for k, v in histogram_data.items()}
 
-                # ✅ Ensure color mapping falls back to "default"
-                bar_colors = {
-                    metadata_mapping.get(k, str(k)): histogram_colors.get(metadata_mapping.get(k, str(k)), histogram_colors.get("default", "#AAAAAA"))
-                    for k in histogram_data.keys()
-                }
+    #             # ✅ Apply metadata mapping to DataFrame for Seaborn boxplot
+    #             df_modified = aggregated.copy()
+    #             if metadata_mapping:
+    #                 df_modified[histogram_variable] = df_modified[histogram_variable].map(metadata_mapping)
 
-                # Render chart with updated labels and color settings
-                dual_axis_histogram_box_chart(
-                    histogram_data,
-                    df_modified,  # Pass modified df with human-readable labels
-                    x_label=histogram_variable,
-                    y1_label="Patient Count",
-                    y2_label=numeric_variable,
-                    title=f"{histogram_variable} vs. {numeric_variable} Distribution",
-                    color_config=bar_colors,  # ✅ Apply color settings from config
-                    box_opacity=boxplot_settings.get("opacity", 0.5),  # ✅ Apply boxplot opacity
-                    box_width=boxplot_settings.get("width", 0.5)  # ✅ Apply boxplot width
-                )
-            else:
-                print(f"⚠️ Warning: One or more columns missing for {histogram_variable} vs {numeric_variable}. Skipping.")
+    #             # ✅ Ensure color mapping falls back to "default"
+    #             bar_colors = {
+    #                 metadata_mapping.get(k, str(k)): histogram_colors.get(metadata_mapping.get(k, str(k)), histogram_colors.get("default", "#AAAAAA"))
+    #                 for k in histogram_data.keys()
+    #             }
+
+    #             # Render chart with updated labels and color settings
+    #             dual_axis_histogram_box_chart(
+    #                 histogram_data,
+    #                 df_modified,  # Pass modified df with human-readable labels
+    #                 x_label=histogram_variable,
+    #                 y1_label="Patient Count",
+    #                 y2_label=numeric_variable,
+    #                 title=f"{histogram_variable} vs. {numeric_variable} Distribution",
+    #                 color_config=bar_colors,  # ✅ Apply color settings from config
+    #                 box_opacity=boxplot_settings.get("opacity", 0.5),  # ✅ Apply boxplot opacity
+    #                 box_width=boxplot_settings.get("width", 0.5)  # ✅ Apply boxplot width
+    #             )
+    #         else:
+    #             print(f"⚠️ Warning: One or more columns missing for {histogram_variable} vs {numeric_variable}. Skipping.")
 
     # Run Multivariate OLS Linear Regression
     styled_print("Multivariate Linear Regression:", color="blue", style="bold")
